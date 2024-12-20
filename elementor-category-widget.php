@@ -1,56 +1,62 @@
 <?php
 /**
- * Plugin Name: Custom Category Archive Widget for Elementor
- * Plugin URI:
- * Description: Advanced Elementor widget for displaying customizable category archives
+ * Plugin Name: Elementor Category Widget
+ * Description: A custom Elementor widget for displaying category archives
  * Version: 1.0.0
  * Author: Adalberto H. Vega
- * Author URI: https://paypal.me/inteldevign/
+ * Author URI: https://patpal.me/inteldevign
  * Text Domain: elementor-category-widget
- * License: GPL v2 or later
- *
- * @package ElementorCategoryWidget
  */
 
-// Exit if accessed directly.
-if ( ! defined( 'ABSPATH' ) ) {
-	exit;
+if (!defined('ABSPATH')) {
+    exit;
 }
 
-/**
- * Define plugin constants.
- */
-define( 'ELEMENTOR_CATEGORY_WIDGET_VERSION', '1.0.0' );
-define( 'ELEMENTOR_CATEGORY_WIDGET_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
-define( 'ELEMENTOR_CATEGORY_WIDGET_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+final class Elementor_Category_Widget_Plugin {
+    private static $_instance = null;
 
-/**
- * Check if Elementor is installed and activated
- */
-if (!function_exists('is_plugin_active')) {
-    include_once(ABSPATH . 'wp-admin/includes/plugin.php');
-}
-
-function elementor_category_widget_requirements_met() {
-    return is_plugin_active('elementor/elementor.php');
-}
-
-/**
- * Initialize the plugin
- */
-function elementor_category_widget_init() {
-    // Check if Elementor is installed and activated
-    if (!did_action('elementor/loaded')) {
-        add_action('admin_notices', function() {
-            echo '<div class="error"><p>' .
-                 esc_html__('Elementor Category Widget requires Elementor plugin.', 'elementor-category-widget') .
-                 '</p></div>';
-        });
-        return;
+    public static function instance() {
+        if (is_null(self::$_instance)) {
+            self::$_instance = new self();
+        }
+        return self::$_instance;
     }
 
-    // Register category
-    add_action('elementor/elements/categories_registered', function($elements_manager) {
+    public function __construct() {
+        add_action('plugins_loaded', [$this, 'init']);
+    }
+
+    public function init() {
+        // Check if Elementor is installed and activated
+        if (!did_action('elementor/loaded')) {
+            add_action('admin_notices', [$this, 'admin_notice_missing_main_plugin']);
+            return;
+        }
+
+        // Add Plugin actions
+        add_action('elementor/widgets/register', [$this, 'init_widgets']);
+        add_action('elementor/elements/categories_registered', [$this, 'add_elementor_widget_categories']);
+    }
+
+    public function admin_notice_missing_main_plugin() {
+        if (isset($_GET['activate'])) unset($_GET['activate']);
+
+        $message = sprintf(
+            /* translators: 1: Plugin name 2: Elementor */
+            esc_html__('"%1$s" requires "%2$s" to be installed and activated.', 'elementor-category-widget'),
+            '<strong>' . esc_html__('Elementor Category Widget', 'elementor-category-widget') . '</strong>',
+            '<strong>' . esc_html__('Elementor', 'elementor-category-widget') . '</strong>'
+        );
+
+        printf('<div class="notice notice-warning is-dismissible"><p>%1$s</p></div>', $message);
+    }
+
+    public function init_widgets($widgets_manager) {
+        require_once(__DIR__ . '/includes/class-widget.php');
+        $widgets_manager->register(new \ElementorCategoryWidget\Elementor_Category_Widget());
+    }
+
+    public function add_elementor_widget_categories($elements_manager) {
         $elements_manager->add_category(
             'custom-category',
             [
@@ -58,127 +64,40 @@ function elementor_category_widget_init() {
                 'icon' => 'fa fa-plug',
             ]
         );
-    });
-
-    // Register widget
-    add_action('elementor/widgets/register', 'register_category_widget');
-}
-
-add_action('plugins_loaded', 'elementor_category_widget_init');
-
-// Simplify scripts loading
-function elementor_category_widget_scripts() {
-    wp_enqueue_style(
-        'elementor-category-widget',
-        ELEMENTOR_CATEGORY_WIDGET_PLUGIN_URL . 'assets/css/widget.css',
-        [],
-        ELEMENTOR_CATEGORY_WIDGET_VERSION
-    );
-
-    if (is_admin()) {
-        wp_enqueue_script(
-            'elementor-category-widget',
-            ELEMENTOR_CATEGORY_WIDGET_PLUGIN_URL . 'assets/js/widget.js',
-            ['jquery'],
-            ELEMENTOR_CATEGORY_WIDGET_VERSION,
-            true
-        );
     }
 }
-add_action('elementor/frontend/after_enqueue_styles', 'elementor_category_widget_scripts');
 
-// Remove unused code
-remove_action('elementor/widgets/register', 'init_widgets');
+// Initialize plugin
+Elementor_Category_Widget_Plugin::instance();
 
-/**
- * Register Widget Category
- *
- * Register custom widget category for this widget.
- *
- * @since 1.0.0
- * @param array $elements_manager Elementor elements manager.
- * @return array Modified elements manager.
- */
-function add_elementor_widget_categories( $elements_manager ) {
-    $elements_manager->add_category(
-        'custom-category',
-        [
-            'title' => esc_html__( 'Custom Category', 'elementor-category-widget' ),
-            'icon' => 'fa fa-plug',
-        ]
-    );
-    return $elements_manager;
-}
+// Register AJAX handler
+add_action('wp_ajax_get_categories_by_post_type', function() {
+    check_ajax_referer('elementor-editing', 'nonce');
 
-/**
- * Init Widgets
- *
- * Include widget files and register them.
- *
- * @since 1.0.0
- * @return void
- */
-function init_widgets() {
-    require_once( __DIR__ . '/includes/class-widget.php' );
-}
-add_action( 'elementor/widgets/register', 'init_widgets' );
+    if (!isset($_POST['post_type'])) {
+        wp_send_json_error('No post type specified');
+        return;
+    }
 
-/**
- * Register Category Widget
- *
- * Register the custom category widget.
- *
- * @since 1.0.0
- * @param \Elementor\Widgets_Manager $widgets_manager Elementor widgets manager.
- * @return void
- */
-function register_category_widget( $widgets_manager ) {
-    require_once ELEMENTOR_CATEGORY_WIDGET_PLUGIN_DIR . 'includes/class-widget.php';
-    $widgets_manager->register(new \ElementorCategoryWidget\Elementor_Category_Widget());
-}
+    $post_type = sanitize_text_field($_POST['post_type']);
+    $taxonomy = $post_type === 'stm_service' ? 'stm_service_category' : 'category';
 
-// Add AJAX handlers
-add_action( 'wp_ajax_get_categories_by_post_type', 'get_categories_by_post_type_callback' );
-add_action( 'wp_ajax_nopriv_get_categories_by_post_type', 'get_categories_by_post_type_callback' );
+    $terms = get_terms([
+        'taxonomy' => $taxonomy,
+        'hide_empty' => false,
+    ]);
 
-function get_categories_by_post_type_callback() {
-	check_ajax_referer( 'dynamic_category_nonce', 'nonce' );
+    if (is_wp_error($terms)) {
+        wp_send_json_error('Error fetching categories');
+        return;
+    }
 
-	$post_type = isset( $_POST['post_type'] ) ? sanitize_text_field( $_POST['post_type'] ) : '';
+    $categories = [];
+    foreach ($terms as $term) {
+        $categories[$term->term_id] = $term->name;
+    }
 
-	if ( empty( $post_type ) ) {
-		wp_send_json_error( 'No post type provided.' );
-	}
+    wp_send_json_success($categories);
+});
 
-	$taxonomies = get_object_taxonomies($post_type, 'objects');
-	$options = [];
-
-	foreach ($taxonomies as $tax_slug => $tax) {
-		if ($tax_slug === 'category' || $tax->hierarchical) {
-			$terms = get_terms([
-				'taxonomy' => $tax_slug,
-				'hide_empty' => false
-			]);
-
-			if (!is_wp_error($terms)) {
-				foreach ($terms as $term) {
-					$options[$term->term_id] = $term->name;
-				}
-			}
-		}
-	}
-
-	wp_send_json_success($options);
-}
-
-// Enqueue JavaScript
-function enqueue_dynamic_category_scripts() {
-	wp_enqueue_script( 'dynamic-category-filter', plugins_url( 'assets/js/dynamic-category-filter.js', __FILE__ ), array( 'jquery' ), '1.0', true );
-
-	wp_localize_script( 'dynamic-category-filter', 'dynamic_category_ajax', array(
-		'ajax_url' => admin_url( 'admin-ajax.php' ),
-		'nonce'    => wp_create_nonce( 'dynamic_category_nonce' ),
-	) );
-}
-add_action( 'wp_enqueue_scripts', 'enqueue_dynamic_category_scripts' );
-add_action( 'admin_enqueue_scripts', 'enqueue_dynamic_category_scripts' );
+// End of File elementor-category-widget.php

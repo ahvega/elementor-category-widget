@@ -1,0 +1,22 @@
+{
+    "stubs": [
+        "wordpress",
+        "elementor"
+    ],
+    "files": {
+        "exclude": [
+            "**/.git/**",
+            "**/node_modules/**",
+            "**/vendor/**"
+        ]
+    },
+    "completion": {
+        "insertUseDeclaration": true,
+        "fullyQualifyGlobalConstantsAndFunctions": false
+    },
+    "environment": {
+        "includePaths": [
+            "wp-content/plugins/elementor/includes"
+        ]
+    }
+}

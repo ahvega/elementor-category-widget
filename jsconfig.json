@@ -1,0 +1,16 @@
+{
+    "compilerOptions": {
+        "baseUrl": ".",
+        "paths": {
+            "elementor/*": ["wp-content/plugins/elementor/*"]
+        }
+    },
+    "include": [
+        "includes/**/*",
+        "wp-content/plugins/elementor/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "**/node_modules/*"
+    ]
+}
